@@ -1,6 +1,6 @@
 import javax.swing.*;
 import java.awt.*;
-import java.util.ArrayList;
+import java.util.*;
 import java.util.List;
 
 // Node class representing a vertex in the graph
@@ -9,6 +9,8 @@ class Node {
     private double x, y;
     private static final int RADIUS = 25;
     private Color color = new Color(70, 130, 180);
+    private int distance = Integer.MAX_VALUE;
+    private Node parent = null;
     
     public Node(int id, double x, double y) {
         this.id = id;
@@ -23,6 +25,17 @@ class Node {
     public void setY(double y) { this.y = y; }
     public int getRadius() { return RADIUS; }
     public Color getColor() { return color; }
+    public void setColor(Color color) { this.color = color; }
+    public int getDistance() { return distance; }
+    public void setDistance(int distance) { this.distance = distance; }
+    public Node getParent() { return parent; }
+    public void setParent(Node parent) { this.parent = parent; }
+    
+    public void reset() {
+        this.color = new Color(70, 130, 180);
+        this.distance = Integer.MAX_VALUE;
+        this.parent = null;
+    }
     
     public boolean contains(Point point) {
         double dx = point.x - x;
@@ -37,6 +50,7 @@ class Edge {
     private Node target;
     private int weight;
     private Color color = new Color(100, 100, 100);
+    private boolean isInPath = false;
     
     public Edge(Node source, Node target, int weight) {
         this.source = source;
@@ -48,6 +62,14 @@ class Edge {
     public Node getTarget() { return target; }
     public int getWeight() { return weight; }
     public Color getColor() { return color; }
+    public void setColor(Color color) { this.color = color; }
+    public boolean isInPath() { return isInPath; }
+    public void setInPath(boolean inPath) { this.isInPath = inPath; }
+    
+    public void reset() {
+        this.color = new Color(100, 100, 100);
+        this.isInPath = false;
+    }
 }
 
 // Graph class managing nodes and edges
@@ -88,6 +110,71 @@ class Graph {
         }
     }
     
+    public void dijkstra(Node startNode) {
+        // Reset all nodes
+        for (Node node : nodes) {
+            node.reset();
+        }
+        for (Edge edge : edges) {
+            edge.reset();
+        }
+        
+        // Initialize
+        startNode.setDistance(0);
+        startNode.setColor(new Color(50, 205, 50)); // Green for start
+        
+        PriorityQueue<Node> pq = new PriorityQueue<>(Comparator.comparingInt(Node::getDistance));
+        Set<Node> visited = new HashSet<>();
+        pq.add(startNode);
+        
+        while (!pq.isEmpty()) {
+            Node current = pq.poll();
+            
+            if (visited.contains(current)) continue;
+            visited.add(current);
+            
+            // Color visited nodes (except start)
+            if (current != startNode) {
+                current.setColor(new Color(255, 215, 0)); // Gold for visited
+            }
+            
+            // Check all edges from current node
+            for (Edge edge : edges) {
+                if (edge.getSource() == current) {
+                    Node neighbor = edge.getTarget();
+                    int newDist = current.getDistance() + edge.getWeight();
+                    
+                    if (newDist < neighbor.getDistance()) {
+                        neighbor.setDistance(newDist);
+                        neighbor.setParent(current);
+                        pq.add(neighbor);
+                    }
+                }
+            }
+        }
+        
+        // Highlight shortest paths
+        for (Node node : nodes) {
+            if (node.getParent() != null) {
+                for (Edge edge : edges) {
+                    if (edge.getSource() == node.getParent() && edge.getTarget() == node) {
+                        edge.setInPath(true);
+                        edge.setColor(new Color(255, 69, 0)); // Red-orange for path
+                    }
+                }
+            }
+        }
+    }
+    
+    public void reset() {
+        for (Node node : nodes) {
+            node.reset();
+        }
+        for (Edge edge : edges) {
+            edge.reset();
+        }
+    }
+    
     public List<Node> getNodes() { return nodes; }
     public List<Edge> getEdges() { return edges; }
 }
@@ -97,6 +184,7 @@ class GraphPanel extends JPanel {
     private Graph graph;
     private Node selectedNode = null;
     private Point mouseOffset;
+    private Node startNode = null;
     
     public GraphPanel(Graph graph) {
         this.graph = graph;
@@ -134,6 +222,20 @@ class GraphPanel extends JPanel {
         });
     }
     
+    public void setStartNode(Node node) {
+        this.startNode = node;
+        if (node != null) {
+            graph.dijkstra(node);
+        }
+        repaint();
+    }
+    
+    public void resetGraph() {
+        graph.reset();
+        startNode = null;
+        repaint();
+    }
+    
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
@@ -149,6 +251,11 @@ class GraphPanel extends JPanel {
         for (Node node : graph.getNodes()) {
             drawNode(g2d, node);
         }
+        
+        // Draw distances
+        if (startNode != null) {
+            drawDistances(g2d);
+        }
     }
     
     private void drawEdge(Graphics2D g2d, Edge edge) {
@@ -156,7 +263,7 @@ class GraphPanel extends JPanel {
         Node target = edge.getTarget();
         
         g2d.setColor(edge.getColor());
-        g2d.setStroke(new BasicStroke(2));
+        g2d.setStroke(edge.isInPath() ? new BasicStroke(4) : new BasicStroke(2));
         
         // Draw line
         g2d.drawLine((int)source.getX(), (int)source.getY(), 
@@ -222,36 +329,66 @@ class GraphPanel extends JPanel {
         int labelY = y + fm.getAscent() / 2 - 2;
         g2d.drawString(label, labelX, labelY);
     }
+    
+    private void drawDistances(Graphics2D g2d) {
+        g2d.setColor(Color.BLACK);
+        g2d.setFont(new Font("Arial", Font.PLAIN, 12));
+        
+        int y = 20;
+        g2d.drawString("Jarak Terpendek dari Node " + startNode.getId() + ":", 10, y);
+        y += 20;
+        
+        for (Node node : graph.getNodes()) {
+            String distText = "Node " + node.getId() + ": ";
+            if (node.getDistance() == Integer.MAX_VALUE) {
+                distText += "∞ (tidak terjangkau)";
+            } else {
+                distText += node.getDistance();
+            }
+            g2d.drawString(distText, 10, y);
+            y += 18;
+        }
+    }
 }
 
 // Main application class
 public class GraphVisualizer extends JFrame {
+    private Graph graph;
+    private GraphPanel panel;
     
     public GraphVisualizer(int[][] adjacencyMatrix) {
-        setTitle("Graph Visualizer");
+        setTitle("Graph Visualizer - Dijkstra Shortest Path");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         
-        Graph graph = new Graph(adjacencyMatrix);
-        GraphPanel panel = new GraphPanel(graph);
+        graph = new Graph(adjacencyMatrix);
+        panel = new GraphPanel(graph);
         
-        add(panel);
+        // Create control panel
+        JPanel controlPanel = new JPanel();
+        controlPanel.setLayout(new FlowLayout());
+        
+        JLabel label = new JLabel("Pilih Start Node: ");
+        controlPanel.add(label);
+        
+        // Create buttons for each node
+        for (Node node : graph.getNodes()) {
+            JButton button = new JButton("Node " + node.getId());
+            button.addActionListener(e -> panel.setStartNode(node));
+            controlPanel.add(button);
+        }
+        
+        // Reset button
+        JButton resetButton = new JButton("Reset");
+        resetButton.addActionListener(e -> panel.resetGraph());
+        controlPanel.add(resetButton);
+        
+        // Layout
+        setLayout(new BorderLayout());
+        add(panel, BorderLayout.CENTER);
+        add(controlPanel, BorderLayout.SOUTH);
+        
         pack();
         setLocationRelativeTo(null);
     }
     
-    public static void main(String[] args) {
-        // Example adjacency matrix (directed weighted graph)
-        int[][] adjacencyMatrix = {
-            {0, 5, 3, 0, 0},
-            {0, 0, 2, 6, 0},
-            {0, 0, 0, 7, 4},
-            {0, 0, 0, 0, 1},
-            {0, 0, 0, 0, 0}
-        };
-        
-        SwingUtilities.invokeLater(() -> {
-            GraphVisualizer visualizer = new GraphVisualizer(adjacencyMatrix);
-            visualizer.setVisible(true);
-        });
-    }
 }
