@@ -1,7 +1,5 @@
 import javax.swing.SwingUtilities;
 
-import javax.swing.SwingUtilities;
-
 public class Main {
     public static void main(String[] args) {
         // Example adjacency matrix (directed weighted graph)
